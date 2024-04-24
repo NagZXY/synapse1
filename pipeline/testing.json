@@ -1,9 +1,9 @@
 {
-	"name": "Pipeline 2",
+	"name": "testing",
 	"properties": {
 		"activities": [
 			{
-				"name": "Set variable1",
+				"name": "Set variable",
 				"type": "SetVariable",
 				"dependsOn": [],
 				"policy": {
@@ -24,7 +24,7 @@
 				"type": "SynapseNotebook",
 				"dependsOn": [
 					{
-						"activity": "Set variable1",
+						"activity": "Set variable",
 						"dependencyConditions": [
 							"Succeeded"
 						]
@@ -49,7 +49,13 @@
 							"type": "string"
 						}
 					},
-					"snapshot": true
+					"snapshot": true,
+					"conf": {
+						"spark.dynamicAllocation.enabled": null,
+						"spark.dynamicAllocation.minExecutors": null,
+						"spark.dynamicAllocation.maxExecutors": null
+					},
+					"numExecutors": null
 				}
 			}
 		],
