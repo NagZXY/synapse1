@@ -1,0 +1,6826 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "videogamedevsyn"
+		},
+		"LS_AzureSQL_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'LS_AzureSQL'"
+		},
+		"videogamedevsyn-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'videogamedevsyn-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:videogamedevsyn.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"videogamedevsyn-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://videogamedevdls.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/testing')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "Set variable",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "nogz",
+							"value": {
+								"value": "@formatDateTime(convertFromUtc(utcnow(), 'India Standard Time'), 'yyyyMMddHHmmss')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Notebook1",
+						"type": "SynapseNotebook",
+						"dependsOn": [
+							{
+								"activity": "Set variable",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "Notebook 1",
+								"type": "NotebookReference"
+							},
+							"parameters": {
+								"table": {
+									"value": "platform",
+									"type": "string"
+								}
+							},
+							"snapshot": true,
+							"conf": {
+								"spark.dynamicAllocation.enabled": null,
+								"spark.dynamicAllocation.minExecutors": null,
+								"spark.dynamicAllocation.maxExecutors": null
+							},
+							"numExecutors": null
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"nogz": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2024-04-15T22:10:25Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/notebooks/Notebook 1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/videogame_ETL')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "DBO_regionsalesss",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".txt"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "AzureSqlTable1",
+											"type": "DatasetReference",
+											"parameters": {
+												"STN": {
+													"value": "@item().TABLE_NAME",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_dbo_csv",
+											"type": "DatasetReference",
+											"parameters": {
+												"FN": {
+													"value": "@concat(item().TABLE_NAME, '_', formatDateTime(convertFromUtc(utcnow(), 'India Standard Time'), 'yyyyMMddHHmmss'), '.csv')",
+													"type": "Expression"
+												},
+												"FP": {
+													"value": "@concat('raw/', item().TABLE_NAME)",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "DBO_parquett",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "DBO_regionsalesss",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"additionalColumns": [
+												{
+													"name": "created_date",
+													"value": {
+														"value": "@formatDateTime(convertFromUtc(utcnow(), 'India Standard Time'), 'yyyy-MM-dd HH:mm:ss')",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": {
+													"value": "@concat('raw/', item().TABLE_NAME)",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.csv",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_dbo_csv",
+											"type": "DatasetReference",
+											"parameters": {
+												"FN": "region_20240413204745.csv",
+												"FP": "raw/region"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_dbo_parquet",
+											"type": "DatasetReference",
+											"parameters": {
+												"FNPQ": {
+													"value": "@item().TABLE_NAME",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "select * from\ninformation_schema.tables\nwhere table_type = 'BASE TABLE'",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "AzureSqlTable1",
+								"type": "DatasetReference",
+								"parameters": {
+									"STN": "region"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2024-04-15T21:12:33Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/AzureSqlTable1')]",
+				"[concat(variables('workspaceId'), '/datasets/DS_dbo_csv')]",
+				"[concat(variables('workspaceId'), '/datasets/DS_dbo_parquet')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AzureSqlTable1')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQL",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"STN": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "region_id",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "game_platform_id",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "num_sales",
+						"type": "decimal",
+						"precision": 5,
+						"scale": 2
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": {
+						"value": "@dataset().STN",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/LS_AzureSQL')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/DS_dbo_csv')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "videogamedevsyn-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"FN": {
+						"type": "string"
+					},
+					"FP": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().FN",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().FP",
+							"type": "Expression"
+						},
+						"fileSystem": "videogamedevfs"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/videogamedevsyn-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/DS_dbo_parquet')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "videogamedevsyn-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"FNPQ": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@concat(dataset().FNPQ, '.parquet')",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@concat('silver/', dataset().FNPQ)",
+							"type": "Expression"
+						},
+						"fileSystem": "videogamedevfs"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/videogamedevsyn-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/LS_AzureSQL')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"connectionString": "[parameters('LS_AzureSQL_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/videogamedevsyn-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('videogamedevsyn-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/videogamedevsyn-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('videogamedevsyn-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "SELECT *\nFROM sys.schemas",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "nagzsyndb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/View Parquet')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE OR ALTER VIEW game\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW game_platform\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game_platform/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW game_publisher\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game_publisher/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW genre\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/genre/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW platform\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/platform/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW publisher\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/publisher/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW region\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/region/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW region_sales\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/region_sales/',\n    format = 'parquet') as rows",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "nagzsyndb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Notebook 1')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "SparkPool1",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "a8874cb8-d740-49c7-b3c4-c4393b9bcf57"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1",
+						"state": {
+							"f2e2cfca-69f9-475f-934f-179ba4f2d55e": {
+								"type": "Synapse.DataFrame",
+								"sync_state": {
+									"table": {
+										"rows": [
+											{
+												"0": "1",
+												"1": "11",
+												"2": "'98 Koshien",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "2",
+												"1": "8",
+												"2": ".hack//G.U. Vol.1//Rebirth",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "3",
+												"1": "8",
+												"2": ".hack//G.U. Vol.2//Reminisce",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "4",
+												"1": "8",
+												"2": ".hack//G.U. Vol.2//Reminisce (jp sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "5",
+												"1": "8",
+												"2": ".hack//G.U. Vol.3//Redemption",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "6",
+												"1": "8",
+												"2": ".hack//Infection Part 1",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "7",
+												"1": "8",
+												"2": ".hack//Link",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "8",
+												"1": "8",
+												"2": ".hack//Mutation Part 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "9",
+												"1": "8",
+												"2": ".hack//Outbreak Part 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "10",
+												"1": "8",
+												"2": ".hack//Quarantine Part 4: The Final Chapter",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "11",
+												"1": "1",
+												"2": ".hack: Sekai no Mukou ni + Versus",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "12",
+												"1": "7",
+												"2": "007 Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "13",
+												"1": "1",
+												"2": "007: Quantum of Solace",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "14",
+												"1": "1",
+												"2": "007: The World is not Enough",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "15",
+												"1": "9",
+												"2": "007: Tomorrow Never Dies",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "16",
+												"1": "4",
+												"2": "1 vs. 100",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "17",
+												"1": "2",
+												"2": "1/2 Summer +",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "18",
+												"1": "11",
+												"2": "10 Minute Solution",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "19",
+												"1": "6",
+												"2": "100 All-Time Favorites",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "20",
+												"1": "4",
+												"2": "100 Classic Books",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "21",
+												"1": "4",
+												"2": "100 Classic Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "22",
+												"1": "4",
+												"2": "1000 Cooking Recipes from ELLE à table",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "23",
+												"1": "1",
+												"2": "1001 Touch Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "24",
+												"1": "6",
+												"2": "101-in-1 Explosive Megamix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "25",
+												"1": "4",
+												"2": "101-in-1 Party Megamix Wii",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "26",
+												"1": "11",
+												"2": "101-in-1 Sports Megamix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "27",
+												"1": "11",
+												"2": "101-in-1 Sports Party Megamix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "28",
+												"1": "11",
+												"2": "1080°: TenEighty Snowboarding",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "29",
+												"1": "2",
+												"2": "11eyes: CrossOver",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "30",
+												"1": "2",
+												"2": "12-Sai. Honto no Kimochi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "31",
+												"1": "2",
+												"2": "12-Sai. Koisuru Diary",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "32",
+												"1": "2",
+												"2": "12Riven: The Psi-Climinal of Integral",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "33",
+												"1": "2",
+												"2": "15 Days",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "34",
+												"1": "10",
+												"2": "1701 A.D.",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "35",
+												"1": "7",
+												"2": "18 Wheeler: American Pro Trucker",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "36",
+												"1": "7",
+												"2": "18 Wheels of Steel: Extreme Trucker",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "37",
+												"1": "7",
+												"2": "18 Wheels of Steel: Extreme Trucker 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "38",
+												"1": "7",
+												"2": "187: Ride or Die",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "39",
+												"1": "9",
+												"2": "1942",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "40",
+												"1": "7",
+												"2": "2 Games in 1 Double Pack: Hot Wheels Velocity X / Hot Wheels World Race",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "41",
+												"1": "1",
+												"2": "2 Games in 1 Double Pack: The Incredibles / Finding Nemo: The Continuing Adventures",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "42",
+												"1": "4",
+												"2": "2 Games in 1: Disney Princess & The Lion King",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "43",
+												"1": "1",
+												"2": "2 Games in 1: Disney's Brother Bear / The Lion King 1 1/2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "44",
+												"1": "4",
+												"2": "2 Games in 1: Sonic Advance & ChuChu Rocket!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "45",
+												"1": "4",
+												"2": "2 Games in 1: Sonic Battle & ChuChu Rocket!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "46",
+												"1": "4",
+												"2": "2 Games in 1: Sonic Pinball Party & Columns Crown",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "47",
+												"1": "5",
+												"2": "2 Games in 1: SpongeBob SquarePants: SuperSponge & Rugrats Go Wild",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "48",
+												"1": "4",
+												"2": "2 in 1 Combo Pack: Sonic Heroes / Super Monkey Ball Deluxe",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "49",
+												"1": "5",
+												"2": "2-in-1 Game Pack: Spider-Man & Spider-Man 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "50",
+												"1": "11",
+												"2": "2002 FIFA World Cup",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "51",
+												"1": "11",
+												"2": "2010 FIFA World Cup South Africa",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "52",
+												"1": "11",
+												"2": "2014 FIFA World Cup Brazil",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "53",
+												"1": "2",
+												"2": "24: The Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "54",
+												"1": "9",
+												"2": "25 to Life",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "55",
+												"1": "11",
+												"2": "2Xtreme",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "56",
+												"1": "4",
+												"2": "3 in 1: Solitaire, Mahjong & Tangram",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "57",
+												"1": "1",
+												"2": "300: March to Glory",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "58",
+												"1": "11",
+												"2": "3D Baseball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "59",
+												"1": "8",
+												"2": "3D Dot Game Heroes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "60",
+												"1": "6",
+												"2": "3D Lemmings",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "61",
+												"1": "10",
+												"2": "3D Tank Warfare Simulator Panzer Front",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "62",
+												"1": "4",
+												"2": "3DS Classic Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "63",
+												"1": "8",
+												"2": "3rd Super Robot Wars Z Jigoku Hen",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "64",
+												"1": "1",
+												"2": "3rd Super Robot Wars Z: Tengoku-Hen",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "65",
+												"1": "1",
+												"2": "3Xtreme",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "66",
+												"1": "6",
+												"2": "4 Elements",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "67",
+												"1": "4",
+												"2": "4 Game Fun Pack: Monopoly / Boggle / Yahtzee / Battleship",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "68",
+												"1": "4",
+												"2": "4 Nin uchi Mahjong",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "69",
+												"1": "5",
+												"2": "40 Winks",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "70",
+												"1": "2",
+												"2": "428: Fuusa Sareta Shibuya de",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "71",
+												"1": "7",
+												"2": "4x4 EVO 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "72",
+												"1": "7",
+												"2": "4x4 Evolution",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "73",
+												"1": "9",
+												"2": "50 Cent: Blood on the Sand",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "74",
+												"1": "1",
+												"2": "50 Cent: Bulletproof",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "75",
+												"1": "4",
+												"2": "50 Classic Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "76",
+												"1": "4",
+												"2": "64 de Hakken! Tamagotchi Minna de Tamagotchi World",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "77",
+												"1": "1",
+												"2": "7 Days to Die",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "78",
+												"1": "4",
+												"2": "7 Roses: A Darkness Rises",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "79",
+												"1": "6",
+												"2": "7 Wonders II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "80",
+												"1": "6",
+												"2": "7 Wonders of the Ancient World",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "81",
+												"1": "6",
+												"2": "7 Wonders: Treasures of Seven",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "82",
+												"1": "8",
+												"2": "7th Dragon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "83",
+												"1": "8",
+												"2": "7th Dragon 2020",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "84",
+												"1": "8",
+												"2": "7th Dragon 2020-II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "85",
+												"1": "8",
+												"2": "7th Dragon III Code: VFD",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "86",
+												"1": "2",
+												"2": "99 no Namida",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "87",
+												"1": "2",
+												"2": "999: Nine Hours, Nine Persons, Nine Doors",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "88",
+												"1": "5",
+												"2": "A Boy and His Blob",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "89",
+												"1": "5",
+												"2": "A Bug's Life",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "90",
+												"1": "4",
+												"2": "A Collection of Activision Classic Games for the Atari 2600",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "91",
+												"1": "4",
+												"2": "A Collection of Classic Games from the Intellivision",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "92",
+												"1": "12",
+												"2": "A Game of Thrones: Genesis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "93",
+												"1": "1",
+												"2": "A Good Librarian Like a Good Shepherd: Library Party",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "94",
+												"1": "10",
+												"2": "A llI S.V.: A Ressha de Gyoukou 3 Super Version",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "95",
+												"1": "2",
+												"2": "A New Beginning",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "96",
+												"1": "10",
+												"2": "A Ressha de Gyoukou 2001",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "97",
+												"1": "10",
+												"2": "A Ressha de Ikou DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "98",
+												"1": "2",
+												"2": "A Vampyre Story",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "99",
+												"1": "8",
+												"2": "A Witch's Tale",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "100",
+												"1": "10",
+												"2": "A-Train",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "101",
+												"1": "12",
+												"2": "A-Train 6",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "102",
+												"1": "10",
+												"2": "A-Train: City Simulator",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "103",
+												"1": "12",
+												"2": "A. IV Evolution: A Ressha de Ikou 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "104",
+												"1": "10",
+												"2": "A.C.E.: Another Century's Episode",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "105",
+												"1": "10",
+												"2": "A.C.E.: Another Century's Episode 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "106",
+												"1": "10",
+												"2": "A.C.E.: Another Century's Episode 3: The Final",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "107",
+												"1": "10",
+												"2": "A.C.E.: Another Century's Episode Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "108",
+												"1": "10",
+												"2": "A.C.E.: Another Century's Episode R",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "109",
+												"1": "2",
+												"2": "Aa Megami-samaa",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "110",
+												"1": "4",
+												"2": "ABBA: You Can Dance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "111",
+												"1": "1",
+												"2": "Abunai: Koi no Sousa Shitsu",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "112",
+												"1": "4",
+												"2": "AC/DC LIVE: Rock Band Track Pack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "113",
+												"1": "11",
+												"2": "Academy of Champions: Soccer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "114",
+												"1": "2",
+												"2": "Accel World: Ginyoku no Kakusei",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "115",
+												"1": "2",
+												"2": "Accel World: Kasoku no Chouten",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "116",
+												"1": "2",
+												"2": "Ace Attorney 6",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "117",
+												"1": "2",
+												"2": "Ace Attorney Investigations 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "118",
+												"1": "2",
+												"2": "Ace Attorney Investigations: Miles Edgeworth",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "119",
+												"1": "10",
+												"2": "Ace Combat 04: Shattered Skies",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "120",
+												"1": "10",
+												"2": "Ace Combat 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "121",
+												"1": "10",
+												"2": "Ace Combat 3: Electrosphere",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "122",
+												"1": "10",
+												"2": "Ace Combat 5: The Unsung War",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "123",
+												"1": "10",
+												"2": "Ace Combat 6: Fires of Liberation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "124",
+												"1": "10",
+												"2": "Ace Combat X: Skies of Deception",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "125",
+												"1": "10",
+												"2": "Ace Combat Zero: The Belkan War",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "126",
+												"1": "1",
+												"2": "Ace Combat: Assault Horizon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "127",
+												"1": "10",
+												"2": "Ace Combat: Assault Horizon Legacy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "128",
+												"1": "10",
+												"2": "Ace Combat: Joint Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "129",
+												"1": "12",
+												"2": "Achtung Panzer: Kharkov 1943",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "130",
+												"1": "12",
+												"2": "Act of Aggression",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "131",
+												"1": "1",
+												"2": "Action Bass",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "132",
+												"1": "1",
+												"2": "Action Force",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "133",
+												"1": "11",
+												"2": "Active Health with Carol Vorderman",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "134",
+												"1": "11",
+												"2": "Active Life Explorer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "135",
+												"1": "11",
+												"2": "Active Life: Extreme Challenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "136",
+												"1": "4",
+												"2": "Active Life: Magical Carnival",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "137",
+												"1": "11",
+												"2": "Active Life: Outdoor Challenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "138",
+												"1": "4",
+												"2": "Activision Anthology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "139",
+												"1": "4",
+												"2": "Activision Hits: Remixed",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "140",
+												"1": "11",
+												"2": "Actua Tennis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "141",
+												"1": "11",
+												"2": "Adidas Power Soccer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "142",
+												"1": "11",
+												"2": "Adidas Power Soccer 98",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "143",
+												"1": "7",
+												"2": "Adrenalin Misfits",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "144",
+												"1": "8",
+												"2": "Advance Guardian Heroes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "145",
+												"1": "12",
+												"2": "Advance Wars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "146",
+												"1": "12",
+												"2": "Advance Wars 2: Black Hole Rising",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "147",
+												"1": "12",
+												"2": "Advance Wars: Dual Strike",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "148",
+												"1": "1",
+												"2": "Advent Rising",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "149",
+												"1": "5",
+												"2": "Adventure Island",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "150",
+												"1": "1",
+												"2": "Adventure Time: Explore the Dungeon Because I Don't Know!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "151",
+												"1": "1",
+												"2": "Adventure Time: Finn & Jake Investigations",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "152",
+												"1": "2",
+												"2": "Adventure Time: The Secret of the Nameless",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "153",
+												"1": "1",
+												"2": "Adventure Time: The Secret of the Nameless Kingdom",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "154",
+												"1": "6",
+												"2": "Adventures of Lolo",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "155",
+												"1": "1",
+												"2": "Adventures of Tron",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "156",
+												"1": "8",
+												"2": "Adventures to Go!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "157",
+												"1": "8",
+												"2": "Aedis Eclipse: Generation of Chaos",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "158",
+												"1": "1",
+												"2": "Aegis of Earth: Protonovus Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "159",
+												"1": "1",
+												"2": "Aeon Flux",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "160",
+												"1": "10",
+												"2": "Aero Elite: Combat Academy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "161",
+												"1": "7",
+												"2": "Aero Gauge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "162",
+												"1": "1",
+												"2": "AeroFighters Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "163",
+												"1": "2",
+												"2": "Afrika",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "164",
+												"1": "1",
+												"2": "Afro Samurai",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "165",
+												"1": "11",
+												"2": "After Hours Athletes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "166",
+												"1": "2",
+												"2": "Again",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "167",
+												"1": "11",
+												"2": "Agassi Tennis Generation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "168",
+												"1": "2",
+												"2": "Agatha Christie's The ABC Murders",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "169",
+												"1": "2",
+												"2": "Agatha Christie: And Then There Were None",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "170",
+												"1": "2",
+												"2": "Agatha Christie: Death on the Nile",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "171",
+												"1": "2",
+												"2": "Agatha Christie: Evil Under the Sun",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "172",
+												"1": "2",
+												"2": "Agatha Christie: Peril at End House",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "173",
+												"1": "2",
+												"2": "Agatha Christie: The ABC Murders",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "174",
+												"1": "8",
+												"2": "Age of Conan: Rise of the Godslayer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "175",
+												"1": "12",
+												"2": "Age of Empires II: The Age of Kings",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "176",
+												"1": "12",
+												"2": "Age of Empires III",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "177",
+												"1": "12",
+												"2": "Age of Empires III: Complete Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "178",
+												"1": "12",
+												"2": "Age of Empires III: Gold Edition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "179",
+												"1": "12",
+												"2": "Age of Empires III: The Asian Dynasties",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "180",
+												"1": "12",
+												"2": "Age of Empires Online",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "181",
+												"1": "12",
+												"2": "Age of Empires: Collector's Edition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "182",
+												"1": "12",
+												"2": "Age of Empires: Mythologies",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "183",
+												"1": "12",
+												"2": "Age of Empires: The Age of Kings",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "184",
+												"1": "12",
+												"2": "Age of Mythology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "185",
+												"1": "12",
+												"2": "Age of Mythology: The Titans",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "186",
+												"1": "11",
+												"2": "Aggressive Inline",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "187",
+												"1": "10",
+												"2": "Agile Warrior F-111X",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "188",
+												"1": "2",
+												"2": "Aibou DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "189",
+												"1": "8",
+												"2": "Aidyn Chronicles: The First Mage",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "190",
+												"1": "1",
+												"2": "Aikatsu! 2-nin no My Princess",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "191",
+												"1": "2",
+												"2": "Aikatsu! 365 Idol Days",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "192",
+												"1": "8",
+												"2": "Aikatsu! Cinderella Lesson",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "193",
+												"1": "4",
+												"2": "Aikatsu! My No.1 Stage!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "194",
+												"1": "1",
+												"2": "Ailu de Puzzle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "195",
+												"1": "2",
+												"2": "AIR",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "196",
+												"1": "10",
+												"2": "Air Combat",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "197",
+												"1": "10",
+												"2": "Air Conflicts: Aces of World War II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "198",
+												"1": "10",
+												"2": "Air Conflicts: Secret Wars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "199",
+												"1": "1",
+												"2": "Air Raid",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "200",
+												"1": "10",
+												"2": "Air Traffic Chaos",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "201",
+												"1": "11",
+												"2": "Airblade",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "202",
+												"1": "9",
+												"2": "Airborne Troops: Countdown to D-Day",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "203",
+												"1": "9",
+												"2": "AirForce Delta Storm",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "204",
+												"1": "10",
+												"2": "AirForce Delta Strike",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "205",
+												"1": "10",
+												"2": "Airline Tycoon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "206",
+												"1": "10",
+												"2": "Airline Tycoon 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "207",
+												"1": "1",
+												"2": "Airlock",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "208",
+												"1": "10",
+												"2": "Airport Simulator",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "209",
+												"1": "5",
+												"2": "Airship Q",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "210",
+												"1": "2",
+												"2": "Akagawa Jirou Mystery: Yasoukyoku - Hon ni Manekareta Satsujin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "211",
+												"1": "2",
+												"2": "Akai Ito DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "212",
+												"1": "9",
+												"2": "Akai Katana Shin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "213",
+												"1": "2",
+												"2": "Akane Iro ni Somaru Saka Parallel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "214",
+												"1": "12",
+												"2": "Akatsuki no Amaneka to Aoi Kyojin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "215",
+												"1": "2",
+												"2": "Akatsuki no Goei Trinity",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "216",
+												"1": "2",
+												"2": "AKB1/149: Love Election",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "217",
+												"1": "4",
+												"2": "AKB1/48: Idol to Guam de Koishitara...",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "218",
+												"1": "4",
+												"2": "AKB1/48: Idol to Koishitara...",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "219",
+												"1": "1",
+												"2": "AKB48+Me",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "220",
+												"1": "2",
+												"2": "Akiba's Trip",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "221",
+												"1": "2",
+												"2": "Akiba's Trip Plus",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "222",
+												"1": "1",
+												"2": "Akiba's Trip: Undead & Undressed",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "223",
+												"1": "4",
+												"2": "Akko ni Omakase! Brain Shock",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "224",
+												"1": "5",
+												"2": "Akuji the Heartless",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "225",
+												"1": "7",
+												"2": "Aladdin Magic Racer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "226",
+												"1": "1",
+												"2": "Alan Wake",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "227",
+												"1": "11",
+												"2": "Alexi Lalas International Soccer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "228",
+												"1": "7",
+												"2": "Alfa Romeo Racing Italiano",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "229",
+												"1": "2",
+												"2": "Alia's Carnival! Sacrament",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "230",
+												"1": "1",
+												"2": "Alias",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "231",
+												"1": "2",
+												"2": "Alice in Wonderland",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "232",
+												"1": "2",
+												"2": "Alice: Madness Returns",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "233",
+												"1": "1",
+												"2": "Alien",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "234",
+												"1": "9",
+												"2": "Alien Breed Trilogy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "235",
+												"1": "9",
+												"2": "Alien Hominid",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "236",
+												"1": "11",
+												"2": "Alien Monster Bowling League",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "237",
+												"1": "9",
+												"2": "Alien Resurrection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "238",
+												"1": "8",
+												"2": "Alien Syndrome",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "239",
+												"1": "9",
+												"2": "Alien Trilogy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "240",
+												"1": "1",
+												"2": "Alien's Return",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "241",
+												"1": "9",
+												"2": "Alien: Isolation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "242",
+												"1": "1",
+												"2": "Alienators: Evolution Continues",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "243",
+												"1": "1",
+												"2": "Aliens in the Attic",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "244",
+												"1": "12",
+												"2": "Aliens versus Predator: Extinction",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "245",
+												"1": "9",
+												"2": "Aliens vs Predator",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "246",
+												"1": "1",
+												"2": "Aliens vs Predator: Requiem",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "247",
+												"1": "9",
+												"2": "Aliens: Colonial Marines",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "248",
+												"1": "1",
+												"2": "Aliens: Infestation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "249",
+												"1": "4",
+												"2": "All Grown Up! Express Yourself",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "250",
+												"1": "4",
+												"2": "All Grown Up!: Game Boy Advance Video Volume 1",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "251",
+												"1": "3",
+												"2": "All Japan Pro Wrestling featuring Virtua",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "252",
+												"1": "1",
+												"2": "All Kamen Rider: Rider Generation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "253",
+												"1": "1",
+												"2": "All Kamen Rider: Rider Generation 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "254",
+												"1": "8",
+												"2": "All Points Bulletin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "255",
+												"1": "11",
+												"2": "All Star Cheer Squad",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "256",
+												"1": "11",
+												"2": "All Star Cheer Squad 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "257",
+												"1": "1",
+												"2": "All Star Karate",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "258",
+												"1": "3",
+												"2": "All Star Pro-Wrestling",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "259",
+												"1": "11",
+												"2": "All Star Tennis 99",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "260",
+												"1": "11",
+												"2": "All-Pro Football 2K8",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "261",
+												"1": "11",
+												"2": "All-Star Baseball 2000",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "262",
+												"1": "11",
+												"2": "All-Star Baseball 2001",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "263",
+												"1": "11",
+												"2": "All-Star Baseball 2002",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "264",
+												"1": "11",
+												"2": "All-Star Baseball 2003",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "265",
+												"1": "11",
+												"2": "All-Star Baseball 2004",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "266",
+												"1": "11",
+												"2": "All-Star Baseball 99",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "267",
+												"1": "6",
+												"2": "Alleyway",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "268",
+												"1": "12",
+												"2": "Allied General",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "269",
+												"1": "2",
+												"2": "Alone in the Dark",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "270",
+												"1": "2",
+												"2": "Alone in the Dark: Inferno",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "271",
+												"1": "2",
+												"2": "Alone in the Dark: One-Eyed Jack's Revenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "272",
+												"1": "1",
+												"2": "Alpha and Omega",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "273",
+												"1": "8",
+												"2": "Alpha Protocol",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "274",
+												"1": "9",
+												"2": "Alter Echo",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "275",
+												"1": "10",
+												"2": "Alter Ego",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "276",
+												"1": "1",
+												"2": "Altered Beast: Guardian of the Realms",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "277",
+												"1": "8",
+												"2": "Alundra",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "278",
+												"1": "8",
+												"2": "Alundra 2: A New Legend Begins",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "279",
+												"1": "4",
+												"2": "Alvin and the Chipmunks",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "280",
+												"1": "4",
+												"2": "Alvin and the Chipmunks: Chipwrecked",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "281",
+												"1": "4",
+												"2": "Alvin and the Chipmunks: The Squeakquel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "282",
+												"1": "2",
+												"2": "Amagami",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "283",
+												"1": "2",
+												"2": "Amagoushi no Yakata",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "284",
+												"1": "2",
+												"2": "Amatsumi Sora ni! Kumo no Hatate ni",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "285",
+												"1": "2",
+												"2": "Amazing Adventures: The Forgotten Ruins",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "286",
+												"1": "12",
+												"2": "Amazing Island",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "287",
+												"1": "4",
+												"2": "America Oudan Ultra-Quiz",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "288",
+												"1": "9",
+												"2": "America's Army: Rise of a Soldier",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "289",
+												"1": "9",
+												"2": "America's Army: True Soldiers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "290",
+												"1": "1",
+												"2": "America's Next Top Model",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "291",
+												"1": "10",
+												"2": "America's Test Kitchen: Let's Get Cooking",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "292",
+												"1": "11",
+												"2": "American Bass Challenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "293",
+												"1": "7",
+												"2": "American Chopper",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "294",
+												"1": "7",
+												"2": "American Chopper 2: Full Throttle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "295",
+												"1": "2",
+												"2": "American Girl: Julie Finds a Way",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "296",
+												"1": "2",
+												"2": "American Girl: Kit Mystery Challenge!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "297",
+												"1": "4",
+												"2": "American Idol",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "298",
+												"1": "11",
+												"2": "AMF Bowling 2004",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "299",
+												"1": "11",
+												"2": "AMF Bowling Pinbusters!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "300",
+												"1": "11",
+												"2": "AMF Bowling World Lanes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "301",
+												"1": "11",
+												"2": "AMF Xtreme Bowling",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "302",
+												"1": "2",
+												"2": "Amnesia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "303",
+												"1": "4",
+												"2": "Amnesia Crowd",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "304",
+												"1": "4",
+												"2": "Amnesia Later",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "305",
+												"1": "2",
+												"2": "AMNESIA World",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "306",
+												"1": "11",
+												"2": "Amped 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "307",
+												"1": "11",
+												"2": "Amped 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "308",
+												"1": "11",
+												"2": "Amped: Freestyle Snowboarding",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "309",
+												"1": "4",
+												"2": "Amplitude",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "310",
+												"1": "5",
+												"2": "An American Tail: Fievel's Gold Rush",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "311",
+												"1": "1",
+												"2": "Anarchy Reigns",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "312",
+												"1": "1",
+												"2": "And1 Streetball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "313",
+												"1": "7",
+												"2": "Andretti Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "314",
+												"1": "8",
+												"2": "Angel Blade: Neo Tokyo Guardians",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "315",
+												"1": "12",
+												"2": "Angelique Duet",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "316",
+												"1": "1",
+												"2": "Angelique Retour",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "317",
+												"1": "2",
+												"2": "Angelique Trois",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "318",
+												"1": "2",
+												"2": "Angelique: Maren no Rokukishi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "319",
+												"1": "11",
+												"2": "Angler's Club: Ultimate Bass Fishing 3D",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "320",
+												"1": "6",
+												"2": "Angry Birds",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "321",
+												"1": "12",
+												"2": "Angry Birds Star Wars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "322",
+												"1": "1",
+												"2": "Angry Birds Trilogy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "323",
+												"1": "6",
+												"2": "Angry Birds: Rio",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "324",
+												"1": "1",
+												"2": "Anima - Gate of Memories",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "325",
+												"1": "10",
+												"2": "Animal Crossing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "326",
+												"1": "4",
+												"2": "Animal Crossing: Amiibo Festival",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "327",
+												"1": "10",
+												"2": "Animal Crossing: City Folk",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "328",
+												"1": "10",
+												"2": "Animal Crossing: Happy Home Designer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "329",
+												"1": "10",
+												"2": "Animal Crossing: New Leaf",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "330",
+												"1": "10",
+												"2": "Animal Crossing: Wild World",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "331",
+												"1": "6",
+												"2": "Animal Genius",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "332",
+												"1": "2",
+												"2": "Animal Kingdom: Wildlife Expedition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "333",
+												"1": "10",
+												"2": "Animal Paradise",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "334",
+												"1": "10",
+												"2": "Animal Planet: Emergency Vets",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "335",
+												"1": "10",
+												"2": "Animal Planet: Vet Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "336",
+												"1": "10",
+												"2": "Animal Planet: Vet Life",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "337",
+												"1": "11",
+												"2": "Animaniacs Ten Pin Alley",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "338",
+												"1": "5",
+												"2": "Animaniacs: The Great Edgar Hunt",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "339",
+												"1": "10",
+												"2": "AniMates!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "340",
+												"1": "1",
+												"2": "Animorphs: Shattered Reality",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "341",
+												"1": "10",
+												"2": "Anno 1701: Dawn of Discovery",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "342",
+												"1": "12",
+												"2": "Anno 2070",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "343",
+												"1": "12",
+												"2": "Anno 2205",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "344",
+												"1": "1",
+												"2": "Ano Hi Mita Hana no Namae o Bokutachi wa Mada Shiranai",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "345",
+												"1": "2",
+												"2": "Another Code R: A Journey into Lost Memories",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "346",
+												"1": "1",
+												"2": "Ansatsu Kyoushitsu: Assassin Ikusei Keikaku!!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "347",
+												"1": "10",
+												"2": "Ant Nation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "348",
+												"1": "8",
+												"2": "Antiphona no Seikahime: Tenshi no Gakufu Op.A",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "349",
+												"1": "7",
+												"2": "Antz Extreme Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "350",
+												"1": "5",
+												"2": "Anubis II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "351",
+												"1": "1",
+												"2": "Ao no Exorcist: Genkoku no Labyrinth",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "352",
+												"1": "2",
+												"2": "Ao no Kanata no Four Rhythm",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "353",
+												"1": "2",
+												"2": "Aoishiro",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "354",
+												"1": "10",
+												"2": "Apache: Air Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "355",
+												"1": "10",
+												"2": "Apassionata: Die Galanacht der Pferde",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "356",
+												"1": "8",
+												"2": "APB Reloaded",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "357",
+												"1": "5",
+												"2": "Ape Escape",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "358",
+												"1": "5",
+												"2": "Ape Escape 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "359",
+												"1": "5",
+												"2": "Ape Escape 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "360",
+												"1": "4",
+												"2": "Ape Escape Academy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "361",
+												"1": "4",
+												"2": "Ape Escape Academy (jp sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "362",
+												"1": "5",
+												"2": "Ape Escape: On the Loose",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "363",
+												"1": "4",
+												"2": "Ape Escape: Pumped & Primed",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "364",
+												"1": "7",
+												"2": "Apex",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "365",
+												"1": "1",
+												"2": "Apocalypse",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "366",
+												"1": "2",
+												"2": "Apollo Justice: Ace Attorney",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "367",
+												"1": "6",
+												"2": "Aqua Aqua",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "368",
+												"1": "6",
+												"2": "Aqua Panic!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "369",
+												"1": "7",
+												"2": "Aqua Teen Hunger Force: Zombie Ninja Pro-Am",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "370",
+												"1": "1",
+												"2": "Aquaman: Battle for Atlantis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "371",
+												"1": "2",
+												"2": "Aquanaut's Holiday",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "372",
+												"1": "2",
+												"2": "Aquanaut's Holiday: Kakusareta Kiroku",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "373",
+												"1": "3",
+												"2": "Aquapazza: Aquaplus Dream Match",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "374",
+												"1": "10",
+												"2": "Aquarium by DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "375",
+												"1": "8",
+												"2": "Ar Nosurge: Ode to an Unborn Star",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "376",
+												"1": "8",
+												"2": "Ar tonelico 2: Melody of Metafalica",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "377",
+												"1": "8",
+												"2": "Ar tonelico Qoga: Knell of Ar Ciel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "378",
+												"1": "8",
+												"2": "Ar tonelico: Melody of Elemia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "379",
+												"1": "2",
+												"2": "Arabians Lost: The Engagement on Desert",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "380",
+												"1": "8",
+												"2": "Arc Rise Fantasia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "381",
+												"1": "8",
+												"2": "Arc the Lad",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "382",
+												"1": "8",
+												"2": "Arc the Lad II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "383",
+												"1": "8",
+												"2": "Arc the Lad III",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "384",
+												"1": "8",
+												"2": "Arc the Lad: End of Darkness",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "385",
+												"1": "8",
+												"2": "Arc the Lad: Twilight of the Spirits",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "386",
+												"1": "1",
+												"2": "Arcade Hits: Frisky Tom",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "387",
+												"1": "4",
+												"2": "Arcade Party Pak",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "388",
+												"1": "9",
+												"2": "Arcade Shooting Gallery",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "389",
+												"1": "4",
+												"2": "Arcade Zone",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "390",
+												"1": "2",
+												"2": "Arcana Famiglia 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "391",
+												"1": "2",
+												"2": "Arcana Famiglia: La storia della Aracana Famiglia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "392",
+												"1": "1",
+												"2": "Arcana Famiglia: Vascello Phantasma no Majutsushi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "393",
+												"1": "3",
+												"2": "Arcana Heart",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "394",
+												"1": "3",
+												"2": "Arcana Heart 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "395",
+												"1": "8",
+												"2": "Arcania: Gothic 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "396",
+												"1": "11",
+												"2": "Archer Maclean Presents: Pool Paradise",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "397",
+												"1": "4",
+												"2": "Archer Maclean's 3D Pool",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "398",
+												"1": "6",
+												"2": "Archer Maclean's Mercury",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "399",
+												"1": "2",
+												"2": "Arctic Tale",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "400",
+												"1": "7",
+												"2": "Arctic Thunder",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "401",
+												"1": "2",
+												"2": "Are You Alice?",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "402",
+												"1": "4",
+												"2": "Are You Smarter Than A 5th Grader?",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "403",
+												"1": "4",
+												"2": "Are You Smarter Than a 5th Grader? Back to School",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "404",
+												"1": "6",
+												"2": "Are You Smarter than a 5th Grader? Game Time",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "405",
+												"1": "4",
+												"2": "Are You Smarter than a 5th Grader? Make the Grade",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "406",
+												"1": "9",
+												"2": "Area 51",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "407",
+												"1": "11",
+												"2": "Arena Football",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "408",
+												"1": "2",
+												"2": "Aria: The Natural ~Tooi Yume no Mirage~",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "409",
+												"1": "2",
+												"2": "Aria: The Origination ~Aoi Wakusei no El Cielo~",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "410",
+												"1": "6",
+												"2": "Arkanoid DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "411",
+												"1": "9",
+												"2": "ArmA II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "412",
+												"1": "9",
+												"2": "ArmA III",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "413",
+												"1": "9",
+												"2": "Armed and Dangerous",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "414",
+												"1": "1",
+												"2": "Armor Ambush",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "415",
+												"1": "10",
+												"2": "Armored Core",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "416",
+												"1": "10",
+												"2": "Armored Core 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "417",
+												"1": "10",
+												"2": "Armored Core 2: Another Age",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "418",
+												"1": "10",
+												"2": "Armored Core 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "419",
+												"1": "10",
+												"2": "Armored Core 3 Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "420",
+												"1": "10",
+												"2": "Armored Core 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "421",
+												"1": "10",
+												"2": "Armored Core SL: Silent Line Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "422",
+												"1": "10",
+												"2": "Armored Core V",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "423",
+												"1": "10",
+												"2": "Armored Core: For Answer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "424",
+												"1": "10",
+												"2": "Armored Core: Formula Front Extreme Battle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "425",
+												"1": "10",
+												"2": "Armored Core: Last Raven",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "426",
+												"1": "10",
+												"2": "Armored Core: Last Raven Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "427",
+												"1": "10",
+												"2": "Armored Core: Master of Arena",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "428",
+												"1": "10",
+												"2": "Armored Core: Nexus",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "429",
+												"1": "10",
+												"2": "Armored Core: Nine Breaker",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "430",
+												"1": "10",
+												"2": "Armored Core: Project Phantasma",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "431",
+												"1": "10",
+												"2": "Armored Core: Silent Line",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "432",
+												"1": "10",
+												"2": "Armored Core: Verdict Day",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "433",
+												"1": "9",
+												"2": "Armorines: Project S.W.A.R.M.",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "434",
+												"1": "1",
+												"2": "Army Corps of Hell",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "435",
+												"1": "1",
+												"2": "Army Men 3D",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "436",
+												"1": "1",
+												"2": "Army Men World War: Final Front",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "437",
+												"1": "1",
+												"2": "Army Men World War: Land, Sea, Air",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "438",
+												"1": "1",
+												"2": "Army Men World War: Team Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "439",
+												"1": "1",
+												"2": "Army Men: Air Attack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "440",
+												"1": "1",
+												"2": "Army Men: Air Attack 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "441",
+												"1": "1",
+												"2": "Army Men: Air Combat",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "442",
+												"1": "9",
+												"2": "Army Men: Air Combat - The Elite Missions",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "443",
+												"1": "1",
+												"2": "Army Men: Green Rogue",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "444",
+												"1": "9",
+												"2": "Army Men: Major Malfunction",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "445",
+												"1": "12",
+												"2": "Army Men: RTS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "446",
+												"1": "1",
+												"2": "Army Men: Sarge's Heroes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "447",
+												"1": "9",
+												"2": "Army Men: Sarge's Heroes 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "448",
+												"1": "9",
+												"2": "Army Men: Sarge's War",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "449",
+												"1": "9",
+												"2": "Army Men: Soldiers of Misfortune",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "450",
+												"1": "9",
+												"2": "Army of Two",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "451",
+												"1": "9",
+												"2": "Army of Two: The 40th Day",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "452",
+												"1": "9",
+												"2": "Army of Two: The Devil's Cartel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "453",
+												"1": "9",
+												"2": "Army Rescue",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "454",
+												"1": "1",
+												"2": "Around the World in 80 Days",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "455",
+												"1": "1",
+												"2": "Arslan: The Warriors of Legend",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "456",
+												"1": "4",
+												"2": "Art Academy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "457",
+												"1": "4",
+												"2": "Art Academy: Home Studio",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "458",
+												"1": "1",
+												"2": "Art Academy: Lessons for Everyone",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "459",
+												"1": "3",
+												"2": "Art of Fighting 3: The Path of the Warrior",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "460",
+												"1": "3",
+												"2": "Art of Fighting Anthology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "461",
+												"1": "2",
+												"2": "Arthur and the Invisibles",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "462",
+												"1": "7",
+												"2": "Arthur! Ready to Race",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "463",
+												"1": "8",
+												"2": "Arx Fatalis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "464",
+												"1": "8",
+												"2": "ASH: Archaic Sealed Heat",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "465",
+												"1": "11",
+												"2": "Ashes Cricket 2009",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "466",
+												"1": "7",
+												"2": "Asphalt 3D",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "467",
+												"1": "1",
+												"2": "Asphalt: Injection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "468",
+												"1": "7",
+												"2": "Asphalt: Urban GT",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "469",
+												"1": "7",
+												"2": "Asphalt: Urban GT 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "470",
+												"1": "2",
+												"2": "Assassin's Creed",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "471",
+												"1": "1",
+												"2": "Assassin's Creed Chronicles",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "472",
+												"1": "1",
+												"2": "Assassin's Creed Chronicles: China",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "473",
+												"1": "1",
+												"2": "Assassin's Creed II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "474",
+												"1": "1",
+												"2": "Assassin's Creed II: Discovery",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "475",
+												"1": "1",
+												"2": "Assassin's Creed III",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "476",
+												"1": "1",
+												"2": "Assassin's Creed III: Liberation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "477",
+												"1": "1",
+												"2": "Assassin's Creed IV: Black Flag",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "478",
+												"1": "1",
+												"2": "Assassin's Creed Syndicate",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "479",
+												"1": "5",
+												"2": "Assassin's Creed: Altair's Chronicles",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "480",
+												"1": "1",
+												"2": "Assassin's Creed: Bloodlines",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "481",
+												"1": "1",
+												"2": "Assassin's Creed: Brotherhood",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "482",
+												"1": "1",
+												"2": "Assassin's Creed: Revelations",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "483",
+												"1": "1",
+												"2": "Assassin's Creed: Rogue",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "484",
+												"1": "1",
+												"2": "Assassin's Creed: Unity",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "485",
+												"1": "1",
+												"2": "Assassination Classroom: Grand Siege on Kuro-sensei",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "486",
+												"1": "1",
+												"2": "Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "487",
+												"1": "1",
+												"2": "Assault Rigs",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "488",
+												"1": "9",
+												"2": "Assault Suit Leynos",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "489",
+												"1": "1",
+												"2": "Assault: Retribution",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "490",
+												"1": "7",
+												"2": "Assetto Corsa",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "491",
+												"1": "1",
+												"2": "Asterix & Obelix: Kick Buttix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "492",
+												"1": "9",
+												"2": "Asteroids",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "493",
+												"1": "9",
+												"2": "Asteroids Hyper 64",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "494",
+												"1": "8",
+												"2": "Astonishia Story",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "495",
+												"1": "1",
+												"2": "Astro Boy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "496",
+												"1": "1",
+												"2": "Astro Boy: Omega Factor",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "497",
+												"1": "1",
+												"2": "Astro Boy: The Video Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "498",
+												"1": "1",
+												"2": "Astroblast",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "499",
+												"1": "4",
+												"2": "Astrology DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "500",
+												"1": "1",
+												"2": "Asura's Wrath",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "501",
+												"1": "4",
+												"2": "Atari Anniversary Advance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "502",
+												"1": "4",
+												"2": "Atari Anniversary Edition Redux",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "503",
+												"1": "4",
+												"2": "Atari Anthology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "504",
+												"1": "4",
+												"2": "Atari Classics Evolved",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "505",
+												"1": "4",
+												"2": "Atari's Greatest Hits: Volume 1",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "506",
+												"1": "4",
+												"2": "Atari's Greatest Hits: Volume 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "507",
+												"1": "8",
+												"2": "Atelier Annie: Alchemists of Sera Island",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "508",
+												"1": "8",
+												"2": "Atelier Ayesha: The Alchemist of Dusk",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "509",
+												"1": "8",
+												"2": "Atelier Escha & Logy: Alchemists of the Dusk Sky",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "510",
+												"1": "8",
+												"2": "Atelier Iris 2: The Azoth Of Destiny",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "511",
+												"1": "8",
+												"2": "Atelier Iris 3: Grand Phantasm (JP Sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "512",
+												"1": "8",
+												"2": "Atelier Iris 3: Grand Phantasm (US Sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "513",
+												"1": "8",
+												"2": "Atelier Iris: Eternal Mana",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "514",
+												"1": "8",
+												"2": "Atelier Meruru: Alchemist of Arland 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "515",
+												"1": "8",
+												"2": "Atelier Rorona: Alchemist of Arland",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "516",
+												"1": "8",
+												"2": "Atelier Shallie Plus: Alchemists of the Dusk Sea",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "517",
+												"1": "8",
+												"2": "Atelier Shallie: Alchemists of the Dusk Sea",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "518",
+												"1": "8",
+												"2": "Atelier Sophie: The Alchemist of the Mysterious Book",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "519",
+												"1": "8",
+												"2": "Atelier Totori: The Adventurer of Arland",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "520",
+												"1": "11",
+												"2": "Athens 2004",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "521",
+												"1": "6",
+												"2": "Atlantic Quest",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "522",
+												"1": "9",
+												"2": "Atlantis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "523",
+												"1": "6",
+												"2": "Atomic Betty",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "524",
+												"1": "9",
+												"2": "Attack of the Movies 3D",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "525",
+												"1": "1",
+												"2": "Attack on Titan (KOEI)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "526",
+												"1": "1",
+												"2": "Attack on Titan: Humanity in Chains",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "527",
+												"1": "7",
+												"2": "ATV Offroad Fury",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "528",
+												"1": "7",
+												"2": "ATV Offroad Fury 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "529",
+												"1": "7",
+												"2": "ATV Offroad Fury 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "530",
+												"1": "7",
+												"2": "ATV Offroad Fury Pro",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "531",
+												"1": "7",
+												"2": "ATV Offroad Fury: Blazin' Trails",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "532",
+												"1": "7",
+												"2": "ATV Quad Kings",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "533",
+												"1": "7",
+												"2": "ATV Quad Power Racing 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "534",
+												"1": "7",
+												"2": "ATV/Monster Truck Mayhem",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "535",
+												"1": "7",
+												"2": "ATV: Quad Frenzy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "536",
+												"1": "7",
+												"2": "ATV: Quad Power Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "537",
+												"1": "1",
+												"2": "Auto Destruct",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "538",
+												"1": "7",
+												"2": "Auto Modellista",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "539",
+												"1": "7",
+												"2": "Automobili Lamborghini",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "540",
+												"1": "8",
+												"2": "Avalon Code",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "541",
+												"1": "1",
+												"2": "Avatar: The Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "542",
+												"1": "2",
+												"2": "Avatar: The Last Airbender",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "543",
+												"1": "2",
+												"2": "Avatar: The Last Airbender - Into the Inferno",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "544",
+												"1": "1",
+												"2": "Avatar: The Last Airbender - The Burning Earth",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "545",
+												"1": "8",
+												"2": "Away: Shuffle Dungeon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "546",
+												"1": "6",
+												"2": "Azada",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "547",
+												"1": "8",
+												"2": "Azure Dreams",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "548",
+												"1": "1",
+												"2": "Azure Striker Gunvolt: Striker Pack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "549",
+												"1": "1",
+												"2": "Azurik: Rise of Perathia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "550",
+												"1": "2",
+												"2": "B's-LOG Party?",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "551",
+												"1": "10",
+												"2": "B-17: Fortress in the Sky",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "552",
+												"1": "4",
+												"2": "B-Boy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "553",
+												"1": "10",
+												"2": "Baby Pals",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "554",
+												"1": "10",
+												"2": "Babysitting Mama",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "555",
+												"1": "10",
+												"2": "Babysitting Mania",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "556",
+												"1": "11",
+												"2": "Back At The Barnyard: Slop Bucket Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "557",
+												"1": "2",
+												"2": "Back to the Future: The Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "558",
+												"1": "4",
+												"2": "Backstreet Billiards",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "559",
+												"1": "11",
+												"2": "Backyard Baseball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "560",
+												"1": "11",
+												"2": "Backyard Baseball '09",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "561",
+												"1": "11",
+												"2": "Backyard Baseball '10",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "562",
+												"1": "11",
+												"2": "Backyard Baseball 2006",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "563",
+												"1": "11",
+												"2": "Backyard Basketball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "564",
+												"1": "11",
+												"2": "Backyard Hockey",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "565",
+												"1": "11",
+												"2": "Backyard NBA Basketball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "566",
+												"1": "11",
+												"2": "Backyard NFL Football",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "567",
+												"1": "11",
+												"2": "Backyard NFL Football '08",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "568",
+												"1": "11",
+												"2": "Backyard NFL Football '09",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "569",
+												"1": "11",
+												"2": "Backyard NFL Football '10",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "570",
+												"1": "11",
+												"2": "Backyard NFL Football 2006",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "571",
+												"1": "11",
+												"2": "Backyard Skateboarding 2006",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "572",
+												"1": "11",
+												"2": "Backyard Soccer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "573",
+												"1": "11",
+												"2": "Backyard Sports Football: Rookie Rush",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "574",
+												"1": "11",
+												"2": "Backyard Sports: Sandlot Sluggers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "575",
+												"1": "3",
+												"2": "Backyard Wrestling 2: There Goes the Neighborhood",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "576",
+												"1": "3",
+												"2": "Backyard Wrestling: Don't Try This at Home",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "577",
+												"1": "1",
+												"2": "Bad Apple Wars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "578",
+												"1": "9",
+												"2": "Bad Boys: Miami Takedown",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "579",
+												"1": "4",
+												"2": "Bae Yong-joon to Manabu Kankokugo DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "580",
+												"1": "8",
+												"2": "Bahamut Lagoon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "581",
+												"1": "7",
+												"2": "Baja: Edge of Control",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "582",
+												"1": "1",
+												"2": "Bakemonogatari Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "583",
+												"1": "6",
+												"2": "Baku Baku",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "584",
+												"1": "1",
+												"2": "Bakugan Battle Brawlers: Defenders of the Core",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "585",
+												"1": "1",
+												"2": "Bakugan: Battle Brawlers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "586",
+												"1": "1",
+												"2": "Bakugan: Battle Trainer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "587",
+												"1": "12",
+												"2": "Bakugan: Rise of the Resistance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "588",
+												"1": "2",
+												"2": "Bakumatsu Koihana: Shinsengumi DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "589",
+												"1": "2",
+												"2": "Bakumatsu Renka: Karyuu Kenshi-den",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "590",
+												"1": "1",
+												"2": "Bakumatsu Rock",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "591",
+												"1": "4",
+												"2": "Bakumatsu Rock: Ultra Soul",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "592",
+												"1": "7",
+												"2": "Bakusou Dekotora Densetsu: Otoko Ippiki Yume Kaidoi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "593",
+												"1": "7",
+												"2": "Bakusou Kyoudai Let's & Go!! Eternal Wings",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "594",
+												"1": "8",
+												"2": "Baldur's Gate: Dark Alliance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "595",
+												"1": "8",
+												"2": "Baldur's Gate: Dark Alliance II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "596",
+												"1": "1",
+												"2": "Ball Breakers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "597",
+												"1": "11",
+												"2": "Ballblazer Champions",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "598",
+												"1": "6",
+												"2": "Ballistic",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "599",
+												"1": "9",
+												"2": "Ballistic: Ecks vs. Sever",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "600",
+												"1": "5",
+												"2": "Balloon Fight",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "601",
+												"1": "6",
+												"2": "Balloon Pop",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "602",
+												"1": "6",
+												"2": "Balloon Pop 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "603",
+												"1": "11",
+												"2": "Balls of Fury",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "604",
+												"1": "4",
+												"2": "Band Hero",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "605",
+												"1": "9",
+												"2": "Bangai-O Spirits",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "606",
+												"1": "5",
+												"2": "Banjo-Kazooie",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "607",
+												"1": "5",
+												"2": "Banjo-Kazooie: Grunty's Revenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "608",
+												"1": "5",
+												"2": "Banjo-Kazooie: Nuts & Bolts",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "609",
+												"1": "7",
+												"2": "Banjo-Pilot",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "610",
+												"1": "5",
+												"2": "Banjo-Tooie",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "611",
+												"1": "1",
+												"2": "Bank Heist",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "612",
+												"1": "11",
+												"2": "Banushi Life Game: Winner's Circle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "613",
+												"1": "3",
+												"2": "Barbarian",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "614",
+												"1": "1",
+												"2": "Barbie and Her Sisters Puppy Rescue",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "615",
+												"1": "1",
+												"2": "Barbie and the Magic of Pegasus",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "616",
+												"1": "2",
+												"2": "Barbie and the Three Musketeers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "617",
+												"1": "2",
+												"2": "Barbie as The Island Princess",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "618",
+												"1": "2",
+												"2": "Barbie as the Princess and the Pauper",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "619",
+												"1": "5",
+												"2": "Barbie Explorer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "620",
+												"1": "4",
+												"2": "Barbie Fashion Show: An Eye for Style",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "621",
+												"1": "4",
+												"2": "Barbie Groovy Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "622",
+												"1": "11",
+												"2": "Barbie Horse Adventures: Blue Ribbon Race",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "623",
+												"1": "11",
+												"2": "Barbie Horse Adventures: Riding Camp",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "624",
+												"1": "11",
+												"2": "Barbie Horse Adventures: Wild Horse Rescue",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "625",
+												"1": "2",
+												"2": "Barbie in The 12 Dancing Princesses",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "626",
+												"1": "11",
+												"2": "Barbie Super Sports",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "627",
+												"1": "4",
+												"2": "Barbie Superpack: Secret Agent / Groovy Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "628",
+												"1": "1",
+												"2": "Barbie: Groom and Glam Pups",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "629",
+												"1": "4",
+												"2": "Barbie: Jet, Set & Style!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "630",
+												"1": "1",
+												"2": "Barbie: Race & Ride",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "631",
+												"1": "1",
+												"2": "Barnstorming",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "632",
+												"1": "1",
+												"2": "Barnyard",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "633",
+												"1": "5",
+												"2": "Barnyard Blast: Swine of the Night",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "634",
+												"1": "8",
+												"2": "Baroque",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "635",
+												"1": "11",
+												"2": "Baseball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "636",
+												"1": "11",
+												"2": "Baseball Advance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "637",
+												"1": "11",
+												"2": "Baseball Blast!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "638",
+												"1": "11",
+												"2": "Bases Loaded '96: Double Header",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "639",
+												"1": "11",
+												"2": "Basketball Hall of Fame Ultimate Hoops Challenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "640",
+												"1": "11",
+												"2": "Bass Hunter 64",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "641",
+												"1": "11",
+												"2": "Bass Landing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "642",
+												"1": "11",
+												"2": "Bass Pro Shops: The Hunt",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "643",
+												"1": "11",
+												"2": "Bass Pro Shops: The Strike",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "644",
+												"1": "11",
+												"2": "Bass Rise",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "645",
+												"1": "11",
+												"2": "Bass Strike",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "646",
+												"1": "11",
+												"2": "Bassmasters 2000",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "647",
+												"1": "8",
+												"2": "Bastard!! Utsuro Naru Kamigami no Utsuwa",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "648",
+												"1": "8",
+												"2": "Baten Kaitos Origins",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "649",
+												"1": "8",
+												"2": "Baten Kaitos: Eternal Wings and the Lost Ocean",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "650",
+												"1": "1",
+												"2": "Batman & Robin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "651",
+												"1": "1",
+												"2": "Batman Begins",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "652",
+												"1": "1",
+												"2": "Batman Beyond: Return of the Joker",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "653",
+												"1": "1",
+												"2": "Batman Forever: The Arcade Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "654",
+												"1": "2",
+												"2": "Batman: A Telltale Game Series",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "655",
+												"1": "1",
+												"2": "Batman: Arkham Asylum",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "656",
+												"1": "1",
+												"2": "Batman: Arkham City",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "657",
+												"1": "1",
+												"2": "Batman: Arkham Knight",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "658",
+												"1": "1",
+												"2": "Batman: Arkham Origins",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "659",
+												"1": "1",
+												"2": "Batman: Arkham Origins Blackgate",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "660",
+												"1": "1",
+												"2": "Batman: Dark Tomorrow",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "661",
+												"1": "7",
+												"2": "Batman: Gotham City Racer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "662",
+												"1": "1",
+												"2": "Batman: Rise of Sin Tzu",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "663",
+												"1": "1",
+												"2": "Batman: The Brave and the Bold the Videogame",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "664",
+												"1": "2",
+												"2": "Batman: Vengeance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "665",
+												"1": "12",
+												"2": "Battalion Wars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "666",
+												"1": "12",
+												"2": "Battalion Wars 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "667",
+												"1": "4",
+												"2": "Battle & Get! Pokemon Typing DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "668",
+												"1": "3",
+												"2": "Battle Arena Toshinden",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "669",
+												"1": "3",
+												"2": "Battle Arena Toshinden 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "670",
+												"1": "3",
+												"2": "Battle Arena Toshinden 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "671",
+												"1": "3",
+												"2": "Battle Arena Toshinden Remix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "672",
+												"1": "3",
+												"2": "Battle Arena Toshinden URA",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "673",
+												"1": "1",
+												"2": "Battle Assault 3 featuring Gundam Seed",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "674",
+												"1": "12",
+												"2": "Battle Commander: Hachibushu Shura no Heihou",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "675",
+												"1": "11",
+												"2": "Battle Dodge Ball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "676",
+												"1": "9",
+												"2": "Battle Engine Aquila",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "677",
+												"1": "3",
+												"2": "Battle Fantasia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "678",
+												"1": "12",
+												"2": "Battle Hunter",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "679",
+												"1": "12",
+												"2": "Battle of Giants: Dinosaurs",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "680",
+												"1": "12",
+												"2": "Battle of Giants: Dinosaurs Strike",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "681",
+												"1": "12",
+												"2": "Battle of Giants: Dragons",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "682",
+												"1": "12",
+												"2": "Battle of Giants: Mutant Insects",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "683",
+												"1": "8",
+												"2": "Battle Princess of Arcadias",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "684",
+												"1": "9",
+												"2": "Battle Rage",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "685",
+												"1": "11",
+												"2": "Battle Soccer: Field no Hasha",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "686",
+												"1": "8",
+												"2": "Battle Spirits: Digital Starter",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "687",
+												"1": "8",
+												"2": "Battle Spirits: Hero's Soul",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "688",
+												"1": "8",
+												"2": "Battle Spirits: Kiseki no Hasha",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "689",
+												"1": "3",
+												"2": "Battle Stadium D.O.N",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "690",
+												"1": "12",
+												"2": "Battle Stations",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "691",
+												"1": "4",
+												"2": "Battle vs. Chess",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "692",
+												"1": "12",
+												"2": "Battle Worlds: Kronos",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "693",
+												"1": "9",
+												"2": "Battleborn",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "694",
+												"1": "1",
+												"2": "BattleBots: Beyond the BattleBox",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "695",
+												"1": "1",
+												"2": "Battlebots: Design & Destroy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "696",
+												"1": "9",
+												"2": "Battlefield 1942",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "697",
+												"1": "9",
+												"2": "Battlefield 1942: The WW II Anthology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "698",
+												"1": "9",
+												"2": "Battlefield 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "699",
+												"1": "9",
+												"2": "Battlefield 2142",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "700",
+												"1": "9",
+												"2": "Battlefield 2: Modern Combat",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "701",
+												"1": "9",
+												"2": "Battlefield 2: Modern Combat(JP sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "702",
+												"1": "9",
+												"2": "Battlefield 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "703",
+												"1": "9",
+												"2": "Battlefield 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "704",
+												"1": "9",
+												"2": "Battlefield Vietnam",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "705",
+												"1": "9",
+												"2": "Battlefield: Bad Company",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "706",
+												"1": "9",
+												"2": "Battlefield: Bad Company 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "707",
+												"1": "9",
+												"2": "Battlefield: Hardline",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "708",
+												"1": "12",
+												"2": "BattleForge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "709",
+												"1": "12",
+												"2": "Battles of Prince of Persia",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "710",
+												"1": "6",
+												"2": "Battleship / Connect Four / Sorry! / Trouble",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "711",
+												"1": "9",
+												"2": "Battlestar Galactica",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "712",
+												"1": "12",
+												"2": "Battlestations: Midway",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "713",
+												"1": "12",
+												"2": "Battlestations: Pacific",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "714",
+												"1": "1",
+												"2": "BattleTanx",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "715",
+												"1": "1",
+												"2": "BattleTanx: Global Assault",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "716",
+												"1": "9",
+												"2": "Battlezone",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "717",
+												"1": "12",
+												"2": "Battlezone: Rise of the Black Dogs",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "718",
+												"1": "1",
+												"2": "Bayonetta",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "719",
+												"1": "1",
+												"2": "Bayonetta 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "720",
+												"1": "11",
+												"2": "BCFX: The Black College Football Xperience, The Doug Williams Edition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "721",
+												"1": "11",
+												"2": "Beach Spikers: Virtua Beach Volleyball",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "722",
+												"1": "7",
+												"2": "Beamrider",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "723",
+												"1": "4",
+												"2": "Beastly",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "724",
+												"1": "6",
+												"2": "Beastly Frantic Foto",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "725",
+												"1": "4",
+												"2": "Beat City",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "726",
+												"1": "1",
+												"2": "Beat Down: Fists of Vengeance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "727",
+												"1": "4",
+												"2": "Beat Sketch!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "728",
+												"1": "1",
+												"2": "Beatdown: Fists of Vengeance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "729",
+												"1": "4",
+												"2": "Beaterator",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "730",
+												"1": "10",
+												"2": "BeatMania",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "731",
+												"1": "10",
+												"2": "BeatMania Append 3rdMix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "732",
+												"1": "10",
+												"2": "BeatMania Append 4thMix: The beat goes on",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "733",
+												"1": "10",
+												"2": "BeatMania Append GottaMix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "734",
+												"1": "10",
+												"2": "BeatMania IIDX 11: IIDX Red",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "735",
+												"1": "10",
+												"2": "BeatMania IIDX 13: DistorteD",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "736",
+												"1": "10",
+												"2": "BeatMania IIDX 14 Gold",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "737",
+												"1": "10",
+												"2": "BeatMania IIDX 15: DJ Troopers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "738",
+												"1": "10",
+												"2": "BeatMania IIDX 16: Empress + Premium Best",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "739",
+												"1": "10",
+												"2": "BeatMania IIDX 3rd Style",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "740",
+												"1": "10",
+												"2": "BeatMania IIDX 4th Style: New Songs Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "741",
+												"1": "6",
+												"2": "Beautiful Katamari",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "742",
+												"1": "1",
+												"2": "Bee Movie Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "743",
+												"1": "7",
+												"2": "Beetle Adventure Racing!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "744",
+												"1": "11",
+												"2": "Beijing 2008",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "745",
+												"1": "6",
+												"2": "Bejeweled 2 Deluxe",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "746",
+												"1": "6",
+												"2": "Bejeweled 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "747",
+												"1": "6",
+												"2": "Bejeweled Blitz",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "748",
+												"1": "6",
+												"2": "Bejeweled Twist",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "749",
+												"1": "4",
+												"2": "Bella Sara",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "750",
+												"1": "2",
+												"2": "Bella Sara 2 - The Magic of Drasilmare",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "751",
+												"1": "1",
+												"2": "Ben 10 Alien Force: Vilgax Attacks",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "752",
+												"1": "7",
+												"2": "Ben 10 Galactic Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "753",
+												"1": "1",
+												"2": "Ben 10 Omniverse 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "754",
+												"1": "4",
+												"2": "Ben 10 Triple Pack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "755",
+												"1": "5",
+												"2": "Ben 10 Ultimate Alien: Cosmic Destruction",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "756",
+												"1": "1",
+												"2": "Ben 10: Alien Force",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "757",
+												"1": "1",
+												"2": "Ben 10: Protector of Earth",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "758",
+												"1": "4",
+												"2": "Bentley's Hackpack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "759",
+												"1": "1",
+												"2": "Beowulf: The Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "760",
+												"1": "9",
+												"2": "Berzerk",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "761",
+												"1": "4",
+												"2": "Best Friends Tonight",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "762",
+												"1": "6",
+												"2": "Best Of Tests",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "763",
+												"1": "6",
+												"2": "Betty Boop's Double Shift",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "764",
+												"1": "1",
+												"2": "Beyblade Evolution",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "765",
+												"1": "1",
+												"2": "Beyblade G-Revolution",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "766",
+												"1": "1",
+												"2": "BeyBlade VForce: Super Tournament Battle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "767",
+												"1": "1",
+												"2": "Beyblade VForce: Ultimate Blader Jam",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "768",
+												"1": "8",
+												"2": "Beyblade: Metal Fusion",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "769",
+												"1": "1",
+												"2": "Beyblade: Metal Fusion - Battle Fortress",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "770",
+												"1": "1",
+												"2": "Beyblade: Metal Masters",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "771",
+												"1": "2",
+												"2": "Beyond Good & Evil",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "772",
+												"1": "8",
+												"2": "Beyond Oasis",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "773",
+												"1": "8",
+												"2": "Beyond The Beyond",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "774",
+												"1": "2",
+												"2": "Beyond: Two Souls",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "775",
+												"1": "4",
+												"2": "Bicycle Casino 2005",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "776",
+												"1": "11",
+												"2": "Big Air",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "777",
+												"1": "7",
+												"2": "Big Air Freestyle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "778",
+												"1": "9",
+												"2": "Big Bang Mini",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "779",
+												"1": "1",
+												"2": "Big Bass Fishing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "780",
+												"1": "11",
+												"2": "Big Bass World Championship",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "781",
+												"1": "11",
+												"2": "Big Beach Sports",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "782",
+												"1": "4",
+												"2": "Big Brain Academy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "783",
+												"1": "4",
+												"2": "Big Brain Academy: Wii Degree",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "784",
+												"1": "4",
+												"2": "Big Family Games",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "785",
+												"1": "4",
+												"2": "Big Ichigeki! Pachi-Slot Taikouryku Universal Museum",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "786",
+												"1": "1",
+												"2": "Big Idea's VeggieTales: LarryBoy and the Bad Apple",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "787",
+												"1": "11",
+												"2": "Big League Sports",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "788",
+												"1": "11",
+												"2": "Big League Sports: Summer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "789",
+												"1": "11",
+												"2": "Big Mountain 2000",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "790",
+												"1": "7",
+												"2": "Big Mutha Truckers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "791",
+												"1": "7",
+												"2": "Big Mutha Truckers 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "792",
+												"1": "11",
+												"2": "Big Strike Bowling",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "793",
+												"1": "7",
+												"2": "Bigfoot King of Crush",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "794",
+												"1": "7",
+												"2": "Bigfoot: Collision Course",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "795",
+												"1": "7",
+												"2": "Biker Mice From Mars",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "796",
+												"1": "5",
+												"2": "Billy Hatcher and the Giant Egg",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "797",
+												"1": "7",
+												"2": "Billy the Wizard: Rocket Broomstick Racing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "798",
+												"1": "11",
+												"2": "Billy's Boot Camp: Wii de Enjoy Diet!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "799",
+												"1": "1",
+												"2": "Binary Domain",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "800",
+												"1": "2",
+												"2": "Binary Star",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "801",
+												"1": "1",
+												"2": "Bio FREAKS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "802",
+												"1": "1",
+												"2": "Biohazard: Revival Selection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "803",
+												"1": "5",
+												"2": "Bionic Commando",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "804",
+												"1": "1",
+												"2": "Bionicle",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "805",
+												"1": "9",
+												"2": "Bionicle Heroes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "806",
+												"1": "5",
+												"2": "Bionicle: Matoran Adventures",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "807",
+												"1": "9",
+												"2": "BioShock",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "808",
+												"1": "9",
+												"2": "BioShock 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "809",
+												"1": "9",
+												"2": "BioShock Infinite",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "810",
+												"1": "9",
+												"2": "BioShock The Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "811",
+												"1": "10",
+												"2": "Birds of Steel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "812",
+												"1": "4",
+												"2": "Birthday Party Bash",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "813",
+												"1": "3",
+												"2": "Bishoujo Senshi Sailormoon R",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "814",
+												"1": "3",
+												"2": "Bishoujo Senshi Sailormoon S: Juugai Rantou!? Shuyaku Soudatsusen",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "815",
+												"1": "4",
+												"2": "BIT.TRIP COMPLETE",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "816",
+												"1": "4",
+												"2": "BIT.TRIP SAGA",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "817",
+												"1": "9",
+												"2": "Black",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "818",
+												"1": "3",
+												"2": "Black & Bruised",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "819",
+												"1": "12",
+												"2": "Black & White",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "820",
+												"1": "12",
+												"2": "Black & White 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "821",
+												"1": "8",
+												"2": "Black * Rock Shooter: The Game",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "822",
+												"1": "11",
+												"2": "Black Bass with Blue Marlin",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "823",
+												"1": "1",
+												"2": "Black Cat",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "824",
+												"1": "10",
+												"2": "Black Dawn",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "825",
+												"1": "4",
+												"2": "Black Jack vs. Matsudajun",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "826",
+												"1": "2",
+												"2": "Black Mirror 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "827",
+												"1": "8",
+												"2": "Black Rose Valkyrie",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "828",
+												"1": "8",
+												"2": "Black Sigil: Blade of the Exiled",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "829",
+												"1": "8",
+												"2": "Black Stone: Magic & Steel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "830",
+												"1": "12",
+												"2": "Black/Matrix",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "831",
+												"1": "9",
+												"2": "Blacksite: Area 51",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "832",
+												"1": "1",
+												"2": "Blackthorne",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "833",
+												"1": "9",
+												"2": "Blackwater",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "834",
+												"1": "3",
+												"2": "Blade Arcus from Shining EX",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "835",
+												"1": "8",
+												"2": "Blade Dancer: Lineage of Light",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "836",
+												"1": "1",
+												"2": "Blade II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "837",
+												"1": "3",
+												"2": "Blades of Blood: Samurai Shodown III",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "838",
+												"1": "1",
+												"2": "Blades of Time",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "839",
+												"1": "1",
+												"2": "Bladestorm: Nightmare",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "840",
+												"1": "1",
+												"2": "Bladestorm: The Hundred Years' War",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "841",
+												"1": "9",
+												"2": "Blast Chamber",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "842",
+												"1": "1",
+												"2": "Blast Corps",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "843",
+												"1": "11",
+												"2": "Blast Lacrosse",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "844",
+												"1": "1",
+												"2": "Blast Radius",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "845",
+												"1": "9",
+												"2": "Blast Works: Build, Trade, Destroy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "846",
+												"1": "9",
+												"2": "Blaster Master: Blasting Again",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "847",
+												"1": "1",
+												"2": "Blasto",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "848",
+												"1": "3",
+												"2": "BlazBlue: Calamity Trigger",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "849",
+												"1": "3",
+												"2": "BlazBlue: Calamity Trigger Portable",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "850",
+												"1": "3",
+												"2": "BlazBlue: Chrono Phantasma",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "851",
+												"1": "1",
+												"2": "BlazBlue: Chrono Phantasma Extend",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "852",
+												"1": "3",
+												"2": "BlazBlue: Continuum Shift",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "853",
+												"1": "3",
+												"2": "Blazblue: Continuum Shift Extend",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "854",
+												"1": "3",
+												"2": "BlazBlue: Continuum Shift II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "855",
+												"1": "8",
+												"2": "Blaze Union: Story to Reach the Future",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "856",
+												"1": "8",
+												"2": "Blazer Drive",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "857",
+												"1": "10",
+												"2": "Blazing Angels 2: Secret Missions of WWII",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "858",
+												"1": "10",
+												"2": "Blazing Angels: Squadrons of WWII",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "859",
+												"1": "2",
+												"2": "Blazing Dragons",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "860",
+												"1": "8",
+												"2": "Blazing Heroes",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "861",
+												"1": "8",
+												"2": "Blazing Souls",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "862",
+												"1": "8",
+												"2": "Blazing Souls: Accelate",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "863",
+												"1": "1",
+												"2": "Bleach DS 4th: Flame Bringer",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "864",
+												"1": "3",
+												"2": "Bleach GC: Tasogare Ni Mamieru Shinigami",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "865",
+												"1": "3",
+												"2": "Bleach: Blade Battlers",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "866",
+												"1": "3",
+												"2": "Bleach: Blade Battlers 2nd",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "867",
+												"1": "3",
+												"2": "Bleach: Dark Souls",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "868",
+												"1": "3",
+												"2": "Bleach: Dark Souls (JP sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "869",
+												"1": "2",
+												"2": "Bleach: Erabareshi Tamashii",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "870",
+												"1": "8",
+												"2": "Bleach: Hanatareshi Yabou",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "871",
+												"1": "3",
+												"2": "Bleach: Heat the Soul",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "872",
+												"1": "3",
+												"2": "Bleach: Heat the Soul 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "873",
+												"1": "3",
+												"2": "Bleach: Heat the Soul 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "874",
+												"1": "3",
+												"2": "Bleach: Heat the Soul 5",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "875",
+												"1": "3",
+												"2": "Bleach: Heat the Soul 6",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "876",
+												"1": "3",
+												"2": "Bleach: Heat the Soul 7",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "877",
+												"1": "3",
+												"2": "Bleach: Shattered Blade",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "878",
+												"1": "3",
+												"2": "Bleach: Soul Carnival",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "879",
+												"1": "3",
+												"2": "Bleach: Soul Carnival 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "880",
+												"1": "3",
+												"2": "Bleach: Soul Resurreccion",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "881",
+												"1": "8",
+												"2": "Bleach: The 3rd Phantom",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "882",
+												"1": "3",
+												"2": "Bleach: The Blade of Fate",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "883",
+												"1": "3",
+												"2": "Bleach: Versus Crusade",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "884",
+												"1": "5",
+												"2": "Blender Bros.",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "885",
+												"1": "5",
+												"2": "Blinx 2: Masters of Time & Space",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "886",
+												"1": "5",
+												"2": "Blinx: The Time Sweeper",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "887",
+												"1": "11",
+												"2": "Blitz: Overtime",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "888",
+												"1": "11",
+												"2": "Blitz: The League",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "889",
+												"1": "11",
+												"2": "Blitz: The League II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "890",
+												"1": "12",
+												"2": "Blitzkrieg 2 Anthology",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "891",
+												"1": "6",
+												"2": "Block Kuzushi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "892",
+												"1": "4",
+												"2": "Block Party",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "893",
+												"1": "6",
+												"2": "Blokus Portable: Steambot Championship",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "894",
+												"1": "11",
+												"2": "Blood Bowl",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "895",
+												"1": "11",
+												"2": "Blood Bowl: Legendary Edition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "896",
+												"1": "7",
+												"2": "Blood Drive",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "897",
+												"1": "8",
+												"2": "Blood of Bahamut",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "898",
+												"1": "1",
+												"2": "Blood Omen 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "899",
+												"1": "8",
+												"2": "Blood Omen: Legacy of Kain",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "900",
+												"1": "9",
+												"2": "Blood Wake",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "901",
+												"1": "2",
+												"2": "Blood Will Tell: Tezuka Osamu's Dororo",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "902",
+												"1": "2",
+												"2": "Blood: The Last Vampire (Joukan)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "903",
+												"1": "1",
+												"2": "Bloodborne",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "904",
+												"1": "9",
+												"2": "BloodRayne",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "905",
+												"1": "9",
+												"2": "BloodRayne 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "906",
+												"1": "3",
+												"2": "Bloody Roar",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "907",
+												"1": "3",
+												"2": "Bloody Roar 3",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "908",
+												"1": "3",
+												"2": "Bloody Roar 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "909",
+												"1": "3",
+												"2": "Bloody Roar Extreme",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "910",
+												"1": "3",
+												"2": "Bloody Roar II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "911",
+												"1": "3",
+												"2": "Bloody Roar: Primal Fury",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "912",
+												"1": "9",
+												"2": "BlowOut",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "913",
+												"1": "8",
+												"2": "Blue Breaker: Ken Yorimo Hohoemi o",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "914",
+												"1": "8",
+												"2": "Blue Dragon",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "915",
+												"1": "8",
+												"2": "Blue Dragon Plus",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "916",
+												"1": "8",
+												"2": "Blue Dragon: Awakened Shadow",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "917",
+												"1": "2",
+												"2": "Blue Roses: Yousei to Aoi Hitomi no Senshitachi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "918",
+												"1": "2",
+												"2": "Blue Stinger",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "919",
+												"1": "4",
+												"2": "Blue's Clues: Blue's Big Musical",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "920",
+												"1": "5",
+												"2": "Blues Brothers 2000",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "921",
+												"1": "7",
+												"2": "Blur",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "922",
+												"1": "11",
+												"2": "BMX XXX",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "923",
+												"1": "4",
+												"2": "Board Game Classics",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "924",
+												"1": "4",
+												"2": "Board Game: Top Shop",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "925",
+												"1": "1",
+												"2": "Bob the Builder: Can We Fix It?",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "926",
+												"1": "1",
+												"2": "Boboboubo Boubobo: Ougi 87.5 Bakuretsu Hanage Shinken",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "927",
+												"1": "11",
+												"2": "Bode Miller Alpine Skiing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "928",
+												"1": "4",
+												"2": "Body and Brain Connection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "929",
+												"1": "9",
+												"2": "Body Harvest",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "930",
+												"1": "9",
+												"2": "Bodycount",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "931",
+												"1": "10",
+												"2": "Bogey: Dead 6",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "932",
+												"1": "6",
+												"2": "Boing! Docomodake DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "933",
+												"1": "8",
+												"2": "Boktai 2: Solar Boy Django",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "934",
+												"1": "8",
+												"2": "Boktai: The Sun is in Your Hand",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "935",
+												"1": "2",
+												"2": "Boku no Natsuyasumi",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "936",
+												"1": "2",
+												"2": "Boku no Natsuyasumi 2: Umi no Bouken Hen",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "937",
+												"1": "2",
+												"2": "Boku no Natsuyasumi 3: Hokkoku Hen: Chiisana Boku no Dai Sougen?",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "938",
+												"1": "2",
+												"2": "Boku no Natsuyasumi 4: Seitouchi Shounen Tanteidan, Boku to Himitsu no Chizu",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "939",
+												"1": "2",
+												"2": "Boku no Natsuyasumi Portable 2: Nazo Nazo Shimai to Chinbotsusen no Himitsu",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "940",
+												"1": "2",
+												"2": "Boku no Natsuyasumi Portable: Mushi Mushi Hakase to Teppen-yama no Himitsu!!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "941",
+												"1": "2",
+												"2": "Bolt",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "942",
+												"1": "6",
+												"2": "Bombastic",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "943",
+												"1": "6",
+												"2": "Bomberman",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "944",
+												"1": "6",
+												"2": "Bomberman (jp sales)",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "945",
+												"1": "6",
+												"2": "Bomberman 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "946",
+												"1": "6",
+												"2": "Bomberman 64",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "947",
+												"1": "2",
+												"2": "Bomberman 64: The Second Attack!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "948",
+												"1": "9",
+												"2": "Bomberman B-Daman",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "949",
+												"1": "7",
+												"2": "Bomberman Fantasy Race",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "950",
+												"1": "2",
+												"2": "Bomberman Generation",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "951",
+												"1": "5",
+												"2": "Bomberman Hero",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "952",
+												"1": "6",
+												"2": "Bomberman II",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "953",
+												"1": "6",
+												"2": "Bomberman Jetters",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "954",
+												"1": "4",
+												"2": "Bomberman Land",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "955",
+												"1": "6",
+												"2": "Bomberman Land Touch!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "956",
+												"1": "6",
+												"2": "Bomberman Land Touch! 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "957",
+												"1": "6",
+												"2": "Bomberman Max 2: Blue Advance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "958",
+												"1": "6",
+												"2": "Bomberman Max 2: Red Advance",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "959",
+												"1": "6",
+												"2": "Bomberman Party Edition",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "960",
+												"1": "8",
+												"2": "Bomberman Story DS",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "961",
+												"1": "6",
+												"2": "Bomberman Tournament",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "962",
+												"1": "6",
+												"2": "Bomberman World",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "963",
+												"1": "6",
+												"2": "Bomberman: Act Zero",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "964",
+												"1": "4",
+												"2": "Boogie",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "965",
+												"1": "4",
+												"2": "Boogie SuperStar",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "966",
+												"1": "1",
+												"2": "Book of Spells",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "967",
+												"1": "6",
+												"2": "Bookworm",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "968",
+												"1": "6",
+												"2": "Bookworm Deluxe",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "969",
+												"1": "6",
+												"2": "Boom Blox",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "970",
+												"1": "6",
+												"2": "Boom Blox Bash Party",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "971",
+												"1": "3",
+												"2": "BoomBots",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "972",
+												"1": "1",
+												"2": "Boot Camp Academy",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "973",
+												"1": "9",
+												"2": "Borderlands",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "974",
+												"1": "9",
+												"2": "Borderlands 2",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "975",
+												"1": "9",
+												"2": "Borderlands: Double Game Add-On Pack",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "976",
+												"1": "9",
+												"2": "Borderlands: The Handsome Collection",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "977",
+												"1": "9",
+												"2": "Borderlands: The Pre-Sequel",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "978",
+												"1": "2",
+												"2": "Botanicula",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "979",
+												"1": "11",
+												"2": "Bottom of the 9th",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "980",
+												"1": "11",
+												"2": "Bottom of the 9th '97",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "981",
+												"1": "11",
+												"2": "Bottom of the 9th '99",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "982",
+												"1": "6",
+												"2": "Boulder Dash: Rocks!",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "983",
+												"1": "8",
+												"2": "Bound By Flame",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "984",
+												"1": "1",
+												"2": "Bounty Hounds",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "985",
+												"1": "3",
+												"2": "Boxer's Road",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "986",
+												"1": "3",
+												"2": "Boxing",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "987",
+												"1": "11",
+												"2": "Boxing Fever",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "988",
+												"1": "9",
+												"2": "BRAHMA Force: The Assault on Beltlogger 9",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "989",
+												"1": "5",
+												"2": "Braid",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "990",
+												"1": "6",
+												"2": "Brain Age 2: More Training in Minutes a Day",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "991",
+												"1": "6",
+												"2": "Brain Age: Concentration Training",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "992",
+												"1": "4",
+												"2": "Brain Age: Train Your Brain in Minutes a Day",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "993",
+												"1": "4",
+												"2": "Brain Assist",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "994",
+												"1": "6",
+												"2": "Brain Boost: Beta Wave",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "995",
+												"1": "6",
+												"2": "Brain Boost: Gamma Wave",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "996",
+												"1": "4",
+												"2": "Brain Challenge",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "997",
+												"1": "2",
+												"2": "Brain Dead 13",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "998",
+												"1": "6",
+												"2": "Brain Exercise With Dr. Kawashima",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "999",
+												"1": "4",
+												"2": "Brain Quest: Grades 3 & 4",
+												"3": "2024-04-16 01:08:12"
+											},
+											{
+												"0": "1000",
+												"1": "4",
+												"2": "Brain Quest: Grades 5 & 6",
+												"3": "2024-04-16 01:08:12"
+											}
+										],
+										"schema": [
+											{
+												"key": "0",
+												"name": "id",
+												"type": "string"
+											},
+											{
+												"key": "1",
+												"name": "genre_id",
+												"type": "string"
+											},
+											{
+												"key": "2",
+												"name": "game_name",
+												"type": "string"
+											},
+											{
+												"key": "3",
+												"name": "created_date",
+												"type": "string"
+											}
+										],
+										"truncated": false
+									},
+									"isSummary": false,
+									"language": "scala"
+								},
+								"persist_state": {
+									"view": {
+										"type": "details",
+										"chartOptions": {
+											"chartType": "bar",
+											"aggregationType": "count",
+											"categoryFieldKeys": [
+												"0"
+											],
+											"seriesFieldKeys": [
+												"0"
+											],
+											"isStacked": false
+										}
+									}
+								}
+							}
+						}
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/21ea98dd-3d36-4d3e-8831-73f7b6f2c8d3/resourceGroups/Nagz/providers/Microsoft.Synapse/workspaces/videogamedevsyn/bigDataPools/SparkPool1",
+						"name": "SparkPool1",
+						"type": "Spark",
+						"endpoint": "https://videogamedevsyn.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/SparkPool1",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.4",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"print(\"Spark Pool won't be running cause it costs\")"
+						],
+						"outputs": [],
+						"execution_count": 1
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"jupyter": {
+								"source_hidden": false,
+								"outputs_hidden": false
+							},
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"from pyspark.sql import SparkSession\r\n",
+							"\r\n",
+							"# Azure storage access info\r\n",
+							"blob_account_name = 'videogamedevdls' # replace with your blob name\r\n",
+							"blob_container_name = 'videogamedevfs' # replace with your container name\r\n",
+							"linked_service_name = 'videogamedevsyn-WorkspaceDefaultStorage' # replace with your linked service name\r\n",
+							"\r\n",
+							"blob_sas_token = mssparkutils.credentials.getConnectionStringOrCreds(linked_service_name)\r\n",
+							"\r\n",
+							"# Allow SPARK to access from Blob remotely\r\n",
+							"\r\n",
+							"spark.conf.set('fs.azure.sas.%s.%s.dfs.core.windows.net' % (blob_container_name, blob_account_name), blob_sas_token)"
+						],
+						"outputs": [],
+						"execution_count": 11
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"jupyter": {
+								"source_hidden": false,
+								"outputs_hidden": false
+							},
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							},
+							"tags": [
+								"parameters"
+							]
+						},
+						"source": [
+							"table='game'"
+						],
+						"outputs": [],
+						"execution_count": 12
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"jupyter": {
+								"source_hidden": false,
+								"outputs_hidden": false
+							},
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"blob_relative_path = f'silver/{table}/{table}.parquet' # replace with your relative folder path\r\n",
+							"wasb_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (blob_container_name, blob_account_name, blob_relative_path)\r\n",
+							"print('Remote blob path: ' + wasb_path)\r\n",
+							"df = spark.read.parquet(wasb_path)"
+						],
+						"outputs": [],
+						"execution_count": 13
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"jupyter": {
+								"source_hidden": false,
+								"outputs_hidden": false
+							},
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							},
+							"collapsed": false
+						},
+						"source": [
+							"display(df)"
+						],
+						"outputs": [],
+						"execution_count": 14
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SparkPool1')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"autoPause": {
+					"enabled": true,
+					"delayInMinutes": 15
+				},
+				"autoScale": {
+					"enabled": false,
+					"maxNodeCount": 8,
+					"minNodeCount": 3
+				},
+				"nodeCount": 3,
+				"nodeSize": "Small",
+				"nodeSizeFamily": "MemoryOptimized",
+				"sparkVersion": "3.4",
+				"isComputeIsolationEnabled": false,
+				"sessionLevelPackagesEnabled": false,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "eastus"
+		}
+	]
+}
