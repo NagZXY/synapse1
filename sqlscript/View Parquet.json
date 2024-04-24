@@ -1,0 +1,17 @@
+{
+	"name": "View Parquet",
+	"properties": {
+		"content": {
+			"query": "CREATE OR ALTER VIEW game\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW game_platform\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game_platform/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW game_publisher\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/game_publisher/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW genre\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/genre/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW platform\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/platform/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW publisher\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/publisher/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW region\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/region/',\n    format = 'parquet') as rows\nGO\nCREATE OR ALTER VIEW region_sales\nAS select *\nfrom openrowset(\n    bulk 'https://videogamedevdls.blob.core.windows.net/videogamedevfs/silver/region_sales/',\n    format = 'parquet') as rows",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "nagzsyndb",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

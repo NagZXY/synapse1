@@ -1,0 +1,39 @@
+{
+	"name": "DS_dbo_csv",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "videogamedevsyn-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"FN": {
+				"type": "string"
+			},
+			"FP": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "DelimitedText",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().FN",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@dataset().FP",
+					"type": "Expression"
+				},
+				"fileSystem": "videogamedevfs"
+			},
+			"columnDelimiter": ",",
+			"escapeChar": "\\",
+			"firstRowAsHeader": true,
+			"quoteChar": "\""
+		},
+		"schema": []
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}
